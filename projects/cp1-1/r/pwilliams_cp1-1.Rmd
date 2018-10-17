@@ -1,0 +1,37 @@
+---
+title: | 
+  | \vspace{5cm} \Large{CP-1 Part 1: ISyE 6404}
+  
+author: "Peter Williams"
+date: "`r Sys.Date()`"
+output:
+   pdf_document:
+      fig_caption: true
+      number_sections: false
+---
+
+\newpage
+\tableofcontents
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## PH-Regression Data-Fit (70%)
+
+1) Locate a data set in the field of your interest, e.g., eCommerce, medical study, drug development, supply-chain/logistics operations, to practice the PH-regression technique. Note that we need to predict both hazard-rate and the survival function at an input x0.
+2) Follow Task #4 in EP-2 to construct a 90% pointwise confidence interval based only the bootstrap method.
+3) Skim through the CP-1 references given in Files> Projects> CP-1> Reference> directory to write a two-page report for summarizing the work there.
+4) Outline steps for implementing one of the studied procedure addressed in the reference. You DO NOT need to implement them, but describe how to do it.
+5) Discuss whether the results getting in (2) and (4) might be different (in what way).
+
+## Large-p-Small-n Problems in PH-Regression (30%)
+
+1) Search the Internet using the key words from the title given in Task #2 for large-p-small- n problems.
+2) Locate three publications with a section on real-life data analysis/example.
+3) Briefly summarize
+i) what is the goal of the study,
+ii) key ideas in solving the problem, and
+iii) what do you learn from their real-life data study.
+
+
