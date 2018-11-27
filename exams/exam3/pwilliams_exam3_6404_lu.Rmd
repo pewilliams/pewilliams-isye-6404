@@ -26,6 +26,7 @@ header-includes:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(data.table))
 ```
 
 ## 1. Wavelets (50%)
@@ -103,12 +104,12 @@ As shown, our resulting P-value $0.298$ does not provide evidence for us to conc
 
 Taking our analyis of prostate cancer, and fish diet further, visual inspection of the marginal proportion of prostate cancer by fish diet classification shows that those who never consumed fish in their diet, may have had slightly higher rates of prostate cancer, which was identified and estimated in the *Lancet* paper referenced above. Here is a basic barplot to visualize difference in rate of cancer by diet: 
 
-```{r barplot_fisher, include = T, echo =F, fig.align='center',fig.height=4}
+```{r barplot_fisher, include = T, echo =F, fig.align='center',fig.height=4, fig.width=5}
 vres <- table(cdat$Cancer.Counts,cdat$Diet.Counts) 
 barplot(prop.table(vres,margin = 2), beside = T, horiz = T,
         main = 'Marginal Proportion of Respondents With Prostate Cancer by Fish Diet',
-        cex.names = 0.7,cex.main = 0.9) 
-legend(9.5,0.3,c('Cancer = No','Cancer = Yes'), bty = 'n', fill = c('gray27','grey'))
+        cex.names = 0.73,cex.main = 0.7, xlim = c(0,1),cex.axis = 0.8) 
+legend(0.7,12.7,c('Cancer = No','Cancer = Yes'), bty = 'n', fill = c('gray27','grey'),cex = 0.5)
 ```
 
 Since, as shown in the text, the Fisher exact test is based on the null hypothesis that *two* factors, each with *two* factor levels, are independent, conditional on fixing marginal frequencies for both factors. However, the fish diet dataset described above is $2 \times 4$, therefore for the purposes of this question, we subset our data to just those with 'Never', and 'Large' fish diets for comparison. 
@@ -131,9 +132,39 @@ Again, our resulting P-value from *Fisher's Exact Test* does not provide evidenc
 
 *Locate a data set suitable for both kernel and spline regressions. The data should include at least 3 x-variables.  It is okay to focus on additive-models discussed in lectures.*
 
+To consider procedures for both kernel and spline regression, we utilize the well-known automobile MPG dataset that is available in the UCI Machine Learning library. Link here: https://archive.ics.uci.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data. The dataset was used in the 1983 American Statistical Association Exposition, and is also well referenced in the following paper:
+
+*Quinlan,R. (1993). Combining Instance-Based and Model-Based Learning. In Proceedings on the Tenth International Conference of Machine Learning, 236-243, University of Massachusetts, Amherst.*
+
+As highlighted by Quinlan in the paper above, this dataset is concerned with city-cycle fuel consumption in miles per gallon, to be predicted in terms of a number of attributes of each car. Each car in the dataset ($N=392$) was manufactured sometime in between 1970 and 1982. For convenience purposes we have removed observations with missing values. Based on the exercise specification we will rely on a car's *Mileage Per Gallon* (mpg), as our outcome of interest, and utilize $3$ co-variates, namely the car's *Cylinder* count (cyl), *Engine Displacement* (disp), and *Acceleration* (accel). A preview of the data is provided below:     
+
+```{r auto_reg, include = T, echo = F}
+# adat <- read.table(file = "https://archive.ics.uci.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data", 
+#                    header = F, stringsAsFactors = F)
+# colnames(adat) <- c('mpg','cyl','disp','horse','wtg','accel','year','origin','name')
+# adat <- data.table(adat)
+# adat <- adat[horse != '?']
+# adat <- transform(adat, horse = as.numeric(horse))
+# saveRDS(adat, '/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/auto_mpg.rds')
+adat <- readRDS('/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/auto_mpg.rds')
+knitr::kable(head(adat[,c('mpg','cyl','disp','accel','name'),with=F]), col.names = c('MPG','Cylinder Count','Displacement','Acceleration','Model'), caption = 'Preview of Automobile MPG Dataset (Published 1993)')
+```
+
+One aspect of this dataset that makes it interestingly suite to kernel and spline regression, is that visually, there is evidence of non-linear relationship between the outcome of interest (*MPG*) and *Engine Displacement*. The relationship between *MPG*, *Cylinder* count and *Acceleration* is less clear, and shown below:  
+
+```{r auto_plot, include = T, echo= F, fig.align='center',fig.height=3}
+par(mfrow=c(1,3))
+with(adat, {
+  plot(disp,mpg, bty= 'n',xlab = 'Engine Displacement', ylab = 'MPG',main = 'MPG vs. Displacement, Cylinder Count and Acceleration',cex.main = 0.67)
+  plot(cyl,mpg,bty= 'n',xlab = 'Cylinder Count', ylab = '')
+  plot(accel,mpg,bty= 'n',xlab = 'Acceleration', ylab = '')
+})
+```
+
 *1)	Go through one-variable-at-a-time kernel- and spline-regression fits to the data for all 3 x-variables. Compare the fitting results using the leave-one-out cross-validation procedure.*
 
 *2)	Select 2 sets of x-locations, e.g., (1st set: x1 = 3, x2 = 5, x3 = 2, where 3, 5, 2 are values within x-data range). These 2 sets of x-locations should be from a location close to the center of x-data-range and another location closer to the edge. Make predictions of Y at these x-data. Compare the predictions from Kernel and spline methods, and also comment on the impact from x-data-locations.*
 
 *3)	Construct the 90% Bias-Corrected Bootstrap CIs for the predictions at the selected 2-sets of x-locations. Show details of the bias-correction process. Compare the CIs at two x-locations, and also from two nonparametric regression methods.*
 
+## Code Appendix
