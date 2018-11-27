@@ -1,0 +1,139 @@
+---
+title: |
+  | \vspace{3cm} \LARGE{6404 Take-home Exam 3: Wavelets, Categorical Data Analysis, Nonparametric Regression}
+author:
+- Peter Williams, pwilliams60@gatech.edu
+
+date: "`r paste0('Date: ',Sys.Date())`"
+output:
+   pdf_document:
+      fig_caption: true
+      number_sections: false
+fontfamily: mathpazo
+fontsize: 10pt
+header-includes:
+  - \usepackage{titling}
+  - \pretitle{\begin{flushleft}}
+  - \posttitle{\end{flushleft}}
+  - \preauthor{\begin{flushleft}}
+  - \postauthor{\end{flushleft}}
+  - \predate{\begin{flushleft}}
+  - \postdate{\end{flushleft}}
+---
+
+\newpage
+\tableofcontents
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Wavelets (50%)
+
+*Locate a one-dimensional data set that has sharp-changes like those presented in the recent lectures for applying the following wavelet procedures. It is best that the data size is larger than 512, and is in 2-factorial, e.g., 210 = 1024.  Note that you need to locate proper R-package/codes to perform the tasks below. *
+
+*i)	Select two families of wavelets for completing the two tasks ii) and iii) below, and make comparisons for the results impacted from distinct wavelet families.*
+
+*ii)	Show a multi-resolution plot of mother and father discrete wavelet-coefficients (DWTs), and make comments about their values.*
+
+*iii)	Apply two thresholding/shrinkage methods to reduce number of non-zero DWT coefficients. Apply the IDWT to reconstruct the original data signal by using the thresholded DWTs. Comment on the quality of the reconstructions from plotting the original and reconstructed signals (by overlaying them in one figure). Compare the two methods about their data-reduction ratios and the MSEs.*
+
+*iv)	Artificially alter the data in one “local-region” and one large-size “global region” for creating 3 distinct “fault-class” data sets. See lecture presentation about details of this task.  Apply the best thresholding method (and the best wavelet-family) to model the data from all FOUR classes (one from the original data and the other 3 fault-class data). Use the multi-resolution plots of thresholded-DWTs to see how they are different in these FOUR classes of data signals.*
+
+*v)	Discuss the possibility and steps for developing a rigorous decision-making procedure to detect faulty-signals against the original data, and distinguish classes of faulty signals with reduced-size data presented by thresholded DWTs.*
+
+
+## 2. Categorical Data Analysis (25%)
+
+*Chapter 9 of the textbook on categorical data analysis includes 6 sections with various problems/data and methods. Locate three sets of problems/data matching three distinct methods taught in lectures. Apply proper statistical software (preferred to be in R-codes) to analyze the data. Provide in-depth comments about the findings in your statistical analyses.*
+
+*1. Chi-square, goodness of fit*
+
+To discuss the Chi-square goodness of fit procedure, a dataset published by the *National Oceanic and Atmospheric Administration* was located that tracks the number of hurricanes that have made landfall on the continental United States by decade over the last $\sim 60$ years. Links to the actual source data is linked below. To get a sense of what the dataset looks like a brief preview is shown below, where the expected count of hurricanes is computed as the grand mean of observed landfalls across the entire dataset:      
+
+```{r ch_gof, include = T, echo =F}
+hdat <- read.table(file = '/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/hurricane-frequencies.txt',header=T,stringsAsFactors=F)
+hdat <- transform(hdat, Expected_Count = round(sum(Count)/nrow(hdat),digits = 3))
+knitr::kable(hdat, caption = 'NOAA: Continental United States: Hurricane Impacts/Landfalls', col.names = c('Decade','Count of Impacts','Expected Impacts'))
+```
+   
+*Source: Continental United States Hurricane Impacts/Landfalls by decade as reported by the NOAA http://www.aoml.noaa.gov/hrd/hurdat/All_U.S._Hurricanes.html*
+
+Given the overall national interest in climate change, and its impact on weather patterns, it is of interest to many researchers if the frequency of hurricane landfalls in recent years in increasing. Given the dataset shown above, we can test this hypothesis in a crude way utilizing differences in observed vs. expected frequency of hurricane landfall. Where $n_i$ refers to observed counts across $i = 1,...,k$ decades measured, and $N = \sum_{=1}^{k} n_i$, is the total number of observed landfalls. We can then set up our test:  
+
+$H_0: F_X(x) = F_0(x)$    
+$H_{\alpha}: F_X(x) \neq F_0(x)$   
+
+```{r gof_comp, include = T, echo = F}
+T_stat <- round(sum((hdat$Count - hdat$Expected_Count)^2 / hdat$Expected_Count),digits = 3)
+p_value <- round(1 - pchisq(T_stat, df = nrow(hdat)-1),digits=3)
+```
+And then take our test statistic $T$ to be, $T = \sum_{i}^{r} \frac{(n_i - np_i)^2}{np_i}$, which is approximately distributed $T \sim \chi_{r-1}^2$. Jumping into actual calculations, we have $T = \frac{(18 - np_1)^2}{np_1} + \frac{(15 - np_2)^2}{np_2} + ... + \frac{(19 - np_6)^2}{np_6} =$ `r T_stat`, where $np_i = 15 \frac{2}{3}$, for $i = 1,...,6$. 
+
+Under our $H_0$, our p-value is `r p_value`, not sufficient evidence to reject our $H_0$ and conclude that hurricane landfalls are different across decades, but perhaps a contentious talking point in conversation. Obviously the scope and depth of the analysis here isn't sufficient to add meaningfully to the overall discussion about climate change. 
+
+*2. Contingency tables, testing for homogeneity and independence*
+
+To demonstrate usage of contigency tables and associated tests using $R$, an article published by medical researchers that followed $N = 6272$, Swedish men for 30 years to see whether there was any association between the amount of fish in their diet and prostate cancer was located. According to authors of the research, the original study actually used pairs of twins. This approach allowed researchers to share their findings with more confidence.  
+
+In the table below, we show frequency counts among research respondents across their fish diet type, and whether or not they contracted prostate cancer across the 30 year study:  
+
+```{r cont_tables, include = T, echo =F}
+cdat <- read.table(file = '/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/fish-diet.txt',header=T,stringsAsFactors = F)
+cdat <- transform(cdat, Diet.Counts = factor(Diet.Counts, levels = c('Large','Moderate','Small','Never')))
+dres <- table(cdat$Cancer.Counts,cdat$Diet.Counts) 
+knitr::kable(dres, caption = 'Occurence of Prostate Cancer, By Amount of Fish Consumption, N = 6272')
+```
+
+*Source: Lancet, June 2001, “Fatty Fish Consumption and Risk of Prostate Cancer”*
+
+The table itself does not communicate readily any differences in cancer rates by diet type. To evaluate further how diet type may impact the rate of cancer, we utilize the chi-square test of independence, which is readily available via the function *chisq.est* in base $R$. Given a contingency table of consisting of $m$ levels of a factor, along with an additional factor with $k$ levels of observations, we can construct a matrix $N = (n_{ij}), i = 1,...,m,\ j = 1,...,k$, where each entry in $N$ is an observed frequency, or count.  The main gist of the chi-square test, is to study observed frequencies in $N$, $n_{ij}$, and their potential differences from the expected (under the hypothesis of independence) frequencies, denoted: $\hat{n_{ij}} = \frac{n_{i.} \cdot n_{j.}}{n_{..}}$, where $n_{i.} = \sum_{j=1}^{k}n_{ij}$, and $n_{j.} = \sum_{i=1}^{m}n_{ij}$, and compute our test statistic $T = \sum_{i=1}^{m} \sum_{j=1}^{k} \frac{(n_{ij} - \hat{n_{ij}})^2}{\hat{n_{ij}}}$, where $T \sim \chi^2$. The results of the test for our fish diet dataset are summarized in the table below:   
+
+```{r cs_test_res, include = T, echo = F}
+cres <- chisq.test(dres)
+cout <- data.frame(variable =c('Test Statistic (Chi)','P-value') , 
+                   value = c(round(cres$statistic,digits = 3),round(cres$p.value,digits = 3)),stringsAsFactors = F)
+knitr::kable(cout, caption = 'Chi-square Test for Independence Test, R (base), function: "chisq.test (df = 3)"', 
+             col.names = c("Result","Value"), row.names = F)
+```
+
+As shown, our resulting P-value $0.298$ does not provide evidence for us to conclude that the observed frequency of prostate cancer by fish diet type, is unexpected by itself. While this finding may be interesting, this test alone isn't sufficient to rule out diet's role in respondent's contraction of prostate, as there are potentially many other factors which can contribute to prostate cancer in addition to diet alone. 
+
+*3. Fisher exact test* 
+
+Taking our analyis of prostate cancer, and fish diet further, visual inspection of the marginal proportion of prostate cancer by fish diet classification shows that those who never consumed fish in their diet, may have had slightly higher rates of prostate cancer, which was identified and estimated in the *Lancet* paper referenced above. Here is a basic barplot to visualize difference in rate of cancer by diet: 
+
+```{r barplot_fisher, include = T, echo =F, fig.align='center',fig.height=4}
+vres <- table(cdat$Cancer.Counts,cdat$Diet.Counts) 
+barplot(prop.table(vres,margin = 2), beside = T, horiz = T,
+        main = 'Marginal Proportion of Respondents With Prostate Cancer by Fish Diet',
+        cex.names = 0.7,cex.main = 0.9) 
+legend(9.5,0.3,c('Cancer = No','Cancer = Yes'), bty = 'n', fill = c('gray27','grey'))
+```
+
+Since, as shown in the text, the Fisher exact test is based on the null hypothesis that *two* factors, each with *two* factor levels, are independent, conditional on fixing marginal frequencies for both factors. However, the fish diet dataset described above is $2 \times 4$, therefore for the purposes of this question, we subset our data to just those with 'Never', and 'Large' fish diets for comparison. 
+
+As shown below, relying on the only the *fisher.test* function to compute *Fisher's Exact Test* in *R (base)* to detect any differences in counts across diet categories. The test shown below, relies on the odds ratio between the occurence of cancer between groups ('Never' and 'Large'): 
+
+```{r fisher_test_fish, include = T, echo = F}
+fres <- fisher.test(vres[,c(1,4)])
+fres_df <- data.frame(
+  Result = c('Odds Ratio','Upper Confidence Level','Lower Confidence Level','P-Value'),
+  Value = round(c(fres$estimate,fres$conf.int[1],fres$conf.int[2],fres$p.value),digits = 3)
+)
+knitr::kable(fres_df, caption = "Fisher's Exact Test: Fish Diet Comparison (Confidence = 0.95)")
+```
+
+Again, our resulting P-value from *Fisher's Exact Test* does not provide evidence for us to conclude that the observed frequency of prostate cancer by fish diet type, is unexpected. As highlighted before, there are potentially many other factors which can contribute to prostate cancer in addition to diet alone. The research referenced above in *Lancet* takes a deeper dive into this particular dataset and concludes that diet, in fact, did play a role describing respondents' rate of contracting prostate cancer, however, relying on more sophisticated statistical techniques. 
+
+## 3. Nonparametric Regression (25%)
+
+
+*Locate a data set suitable for both kernel and spline regressions. The data should include at least 3 x-variables.  It is okay to focus on additive-models discussed in lectures.*
+
+*1)	Go through one-variable-at-a-time kernel- and spline-regression fits to the data for all 3 x-variables. Compare the fitting results using the leave-one-out cross-validation procedure.*
+
+*2)	Select 2 sets of x-locations, e.g., (1st set: x1 = 3, x2 = 5, x3 = 2, where 3, 5, 2 are values within x-data range). These 2 sets of x-locations should be from a location close to the center of x-data-range and another location closer to the edge. Make predictions of Y at these x-data. Compare the predictions from Kernel and spline methods, and also comment on the impact from x-data-locations.*
+
+*3)	Construct the 90% Bias-Corrected Bootstrap CIs for the predictions at the selected 2-sets of x-locations. Show details of the bias-correction process. Compare the CIs at two x-locations, and also from two nonparametric regression methods.*
+
