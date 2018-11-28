@@ -27,6 +27,9 @@ header-includes:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(np))
+suppressPackageStartupMessages(library(parallel))
+suppressPackageStartupMessages(library(reshape2))
 ```
 
 ## 1. Wavelets (50%)
@@ -69,15 +72,11 @@ $H_{\alpha}: F_X(x) \neq F_0(x)$
 T_stat <- round(sum((hdat$Count - hdat$Expected_Count)^2 / hdat$Expected_Count),digits = 3)
 p_value <- round(1 - pchisq(T_stat, df = nrow(hdat)-1),digits=3)
 ```
-And then take our test statistic $T$ to be, $T = \sum_{i}^{r} \frac{(n_i - np_i)^2}{np_i}$, which is approximately distributed $T \sim \chi_{r-1}^2$. Jumping into actual calculations, we have $T = \frac{(18 - np_1)^2}{np_1} + \frac{(15 - np_2)^2}{np_2} + ... + \frac{(19 - np_6)^2}{np_6} =$ `r T_stat`, where $np_i = 15 \frac{2}{3}$, for $i = 1,...,6$. 
-
-Under our $H_0$, our p-value is `r p_value`, not sufficient evidence to reject our $H_0$ and conclude that hurricane landfalls are different across decades, but perhaps a contentious talking point in conversation. Obviously the scope and depth of the analysis here isn't sufficient to add meaningfully to the overall discussion about climate change. 
+And then take our test statistic $T$ to be, $T = \sum_{i}^{r} \frac{(n_i - np_i)^2}{np_i}$, which is approximately distributed $T \sim \chi_{r-1}^2$. Jumping into actual calculations, we have $T = \frac{(18 - np_1)^2}{np_1} + \frac{(15 - np_2)^2}{np_2} + ... + \frac{(19 - np_6)^2}{np_6} =$ `r T_stat`, where $np_i = 15 \frac{2}{3}$, for $i = 1,...,6$. Under our $H_0$, our p-value is `r p_value`, not sufficient evidence to reject our $H_0$ and conclude that hurricane landfalls are different across decades, but perhaps a contentious talking point in conversation. Obviously the scope and depth of the analysis here isn't sufficient to add meaningfully to the overall discussion about climate change. 
 
 *2. Contingency tables, testing for homogeneity and independence*
 
-To demonstrate usage of contigency tables and associated tests using $R$, an article published by medical researchers that followed $N = 6272$, Swedish men for 30 years to see whether there was any association between the amount of fish in their diet and prostate cancer was located. According to authors of the research, the original study actually used pairs of twins. This approach allowed researchers to share their findings with more confidence.  
-
-In the table below, we show frequency counts among research respondents across their fish diet type, and whether or not they contracted prostate cancer across the 30 year study:  
+To demonstrate usage of contigency tables and associated tests using $R$, an article published by medical researchers that followed $N = 6272$, Swedish men for 30 years to see whether there was any association between the amount of fish in their diet and prostate cancer was located. According to authors of the research, the original study actually used pairs of twins. This approach allowed researchers to share their findings with more confidence. In the table below, we show frequency counts among research respondents across their fish diet type, and whether or not they contracted prostate cancer across the 30 year study:  
 
 ```{r cont_tables, include = T, echo =F}
 cdat <- read.table(file = '/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/fish-diet.txt',header=T,stringsAsFactors = F)
@@ -147,10 +146,10 @@ As highlighted by Quinlan in the paper above, this dataset is concerned with cit
 # adat <- transform(adat, horse = as.numeric(horse))
 # saveRDS(adat, '/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/auto_mpg.rds')
 adat <- readRDS('/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/auto_mpg.rds')
-knitr::kable(head(adat[,c('mpg','cyl','disp','accel','name'),with=F]), col.names = c('MPG','Cylinder Count','Displacement','Acceleration','Model'), caption = 'Preview of Automobile MPG Dataset (Published 1993)')
+knitr::kable(head(adat[,c('mpg','disp','cyl','accel','name'),with=F]), col.names = c('MPG','Displacement','Cylinder Count','Acceleration','Model'), caption = 'Preview of Automobile MPG Dataset (Published 1993)')
 ```
 
-One aspect of this dataset that makes it interestingly suite to kernel and spline regression, is that visually, there is evidence of non-linear relationship between the outcome of interest (*MPG*) and *Engine Displacement*. The relationship between *MPG*, *Cylinder* count and *Acceleration* is less clear, and shown below:  
+One aspect of this dataset that makes it interestingly suite to kernel and spline regression, is that visually, there is evidence of non-linear relationship between the outcome of interest (*MPG*) and *Engine Displacement*. The relationship between *MPG*, *Cylinder* count and *Acceleration* is less clear, and shown below in a series of scatter plots:  
 
 ```{r auto_plot, include = T, echo= F, fig.align='center',fig.height=3}
 par(mfrow=c(1,3))
@@ -161,10 +160,283 @@ with(adat, {
 })
 ```
 
-*1)	Go through one-variable-at-a-time kernel- and spline-regression fits to the data for all 3 x-variables. Compare the fitting results using the leave-one-out cross-validation procedure.*
+*1)	Go through one-variable-at-a-time kernel- and spline-regression fits to the data for all 3 x-variables. Compare the fitting results using the leave-one-out cross-validation procedure.*  
 
-*2)	Select 2 sets of x-locations, e.g., (1st set: x1 = 3, x2 = 5, x3 = 2, where 3, 5, 2 are values within x-data range). These 2 sets of x-locations should be from a location close to the center of x-data-range and another location closer to the edge. Make predictions of Y at these x-data. Compare the predictions from Kernel and spline methods, and also comment on the impact from x-data-locations.*
+Iterating over the auto-mpg set, we fit both a spline, and kernel regression model, removing one target observation, and compared the prediction error generated out of sample for each model. Summary statistics resulting from the leave-one-out computation are presented below:  
 
-*3)	Construct the 90% Bias-Corrected Bootstrap CIs for the predictions at the selected 2-sets of x-locations. Show details of the bias-correction process. Compare the CIs at two x-locations, and also from two nonparametric regression methods.*
+```{r leave_oo, include =T, echo = F}
+#leave one out procedure - spline and kernel regression
+# CPU distributed (10 cores here)
+# spl_res <- rbindlist(mclapply(1:nrow(adat), function(i){
+#   train <- adat[-i]
+#   test <- adat[i]
+#   #additive spline fits
+#   spl_fit_x1 <- smooth.spline(train$disp,train$mpg, cv= F,df = 3)
+#   spl_fit_x2 <- smooth.spline(train$cyl,residuals(spl_fit_x1), cv= F,df = 3)
+#   spl_fit_x3 <- smooth.spline(train$accel,residuals(spl_fit_x2), cv= F,df = 3)
+#   test <- transform(test, prediction = predict(spl_fit_x1, data.frame(test$disp))$y + 
+#                       predict(spl_fit_x2, data.frame(test$cyl))$y + predict(spl_fit_x3, data.frame(test$accel))$y)
+#   test$error <- test$mpg - test$prediction #actual vs. estimate
+#   test
+# }, mc.cores=10))
+# 
+# #this takes 1-2 minutes with 10 cores
+# kr_res <- rbindlist(mclapply(1:nrow(adat), function(i){
+#   train <- adat[-i]
+#   test <- adat[i]
+#   #additive kernel reg fits - simplified predict if data.frame is called
+#   kr_fit_x1 <- npreg(mpg~disp,gradients = TRUE, data = train)
+#   train$e1 <- residuals(kr_fit_x1)
+#   kr_fit_x2 <- npreg(e1~cyl,gradients = TRUE, data = train)
+#   train$e2 <- residuals(kr_fit_x2)
+#   kr_fit_x3 <- npreg(e2~accel,gradients = TRUE, data = train)
+#   test$prediction <- predict(kr_fit_x1, newdata = data.frame(disp = test$disp)) + 
+#                       predict(kr_fit_x2, newdata = data.frame(cyl = test$cyl)) + 
+#                       predict(kr_fit_x3, newdata = data.frame(accel = test$accel))
+#   test$error <- test$mpg - test$prediction #actual vs. estimate
+#   test
+# }, mc.cores=10))
+# 
+
+# saveRDS(list(spline = spl_res, kernel = kr_res), file = '/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/loo_res.rds')
+loo_res <- readRDS(file ='/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/loo_res.rds' )
+#error only df
+ldat <- data.table(
+  error = c(loo_res$spline$error,loo_res$kernel$error),
+  method = c(rep('Spline',nrow(adat)), rep('Kernel Regression',nrow(adat)))
+)
+loo_res <- rbindlist(loo_res,use.names = F)
+loo_res$method <- c(rep('Spline',nrow(adat)),rep('Kernel Regression',nrow(adat)))
+comp_rsq <- function(y, predy){
+  1 - sum((y - predy)^2)/ sum((y - mean(y))^2)
+}
+lsum <- loo_res[,.(median_err = median(error), q75 = quantile(error, 0.75),q25 = quantile(error, 0.25), rsq = comp_rsq(y = mpg, predy = prediction.test.disp), mape = mean(abs( mpg/prediction.test.disp -1 ))*100),.(method)]
+lsum <- melt.data.table(lsum, id.vars = 'method')
+lsum <- dcast.data.table(lsum, variable ~ method)
+lsum$variable <- c('Median Error','Error: 75th Percentile','Error: 25th Percentile','R-Squared','Mean Absolute Percentage Error' )
+knitr::kable(lsum, caption = 'Regression Model Error Comparisons: Leave-One-Out Procedure', digits = 2, col.names = c('Statistic','Kernel','Spline'))
+```
+
+The summary statistics from this table clearly highlight that both models perform similarly across a number of simple error statistics. While the kernel regression approach may have a slight edge across a few statistics, in general, both models provided results with symmetric, generally unbiased out-of-sample prediction error for each leave-out observation. While the leave-one-out procedure doesn't highlight any significant differences in performance, further analysis and computation below does show some of the practical benefits of and limitations of each approach to solving the regression problem of predicting a car's *MPG* based on its characteristics. 
+
+Note that computational details for the leave-one-out procedure are detailed in the code appendix. 
+
+*2)	Select 2 sets of x-locations, e.g., (1st set: x1 = 3, x2 = 5, x3 = 2, where 3, 5, 2 are values within x-data range). These 2 sets of x-locations should be from a location close to the center of x-data-range and another location closer to the edge. Make predictions of Y at these x-data. Compare the predictions from kernel and spline methods, and also comment on the impact from x-data-locations.*  
+
+To select $X$-locations, we took the median across all $X$ variables, i.e. *Displacement*, *Cylinder Count*, and *Acceleration* as one $X$-location, denoted as the "Center Point" in subsequence analysis. We then also created an "Outside Point" which is based on the maximum across all $X$ variables, less $1$. That is a point very close to the maximum across all co-variates. The table below summarizes the exact location of these points, and also provides associated predicted values from both kernel regression and spline models that were fit to the full auto-mpg dataset:   
+
+```{r location_pred, include =F, echo = F}
+#fit entire dataset
+#evaluate but don't include due to printout from npreg
+sfit_x1 <- smooth.spline(adat$disp,adat$mpg, cv= F,df = 3)
+sfit_x2 <- smooth.spline(adat$cyl,residuals(sfit_x1), cv= F,df = 3)
+sfit_x3 <- smooth.spline(adat$accel,residuals(sfit_x2), cv= F,df = 3)
+
+#swap out original df
+kdat <- adat
+kfit_x1 <- npreg(mpg~disp,gradients = TRUE, data = kdat)
+kdat$e1 <- residuals(kfit_x1)
+kfit_x2 <- npreg(e1~cyl,gradients = TRUE, data = kdat)
+kdat$e2 <- residuals(kfit_x2)
+kfit_x3 <- npreg(e2~accel,gradients = TRUE, data = kdat)
+```
+
+```{r loc_pred, include=T, echo = F}
+#points for usage
+cpt <- data.table(disp = median(adat$disp),cyl = median(adat$cyl), accel = median(adat$accel), type = 'center point')
+opt <- data.table(disp = max(adat$disp) - 1,cyl = max(adat$cyl)-1, accel = max(adat$accel) - 1, type = 'outside point')
+
+cpt$kr_pred <- round(predict(kfit_x1, newdata = data.frame(disp = cpt$disp)) + 
+                      predict(kfit_x2, newdata = data.frame(cyl = cpt$cyl)) +
+                      predict(kfit_x3, newdata = data.frame(accel = cpt$accel)),digits = 2)
+opt$kr_pred <- round(predict(kfit_x1, newdata = data.frame(disp = opt$disp)) + 
+                      predict(kfit_x2, newdata = data.frame(cyl = opt$cyl)) +
+                      predict(kfit_x3, newdata = data.frame(accel = opt$accel)),digits = 2)
+cpt$spl_pred <- round(as.numeric(predict(sfit_x1, data.frame(cpt$disp))$y +
+                       predict(sfit_x2, data.frame(cpt$cyl))$y + predict(sfit_x3, data.frame(cpt$accel))$y),digits = 2)
+opt$spl_pred <- round(as.numeric(predict(sfit_x1, data.frame(opt$disp))$y +
+                       predict(sfit_x2, data.frame(opt$cyl))$y + predict(sfit_x3, data.frame(opt$accel))$y),digits = 2)
+pdat <- rbindlist(list(cpt,opt))
+knitr::kable(pdat, caption = 'Comparison of Predictions from Spline & Kernel Regression Methods',
+             col.names = c('Displacement','Cylinder','Acceleration','X-Location','Kernel Prediction','Spline Prediction'))
+```
+  
+It is clear based on the table above that the spline provides a more conservative prediction of car MPG for both the center and outside points. To get a sense of how these predictions fare relative to our actual data, the scatter plot below shows our key predictor *Displacement* on the x-axis, against our outcome of interest *MPG* on the y-axis. The predicted MPG given each model is then shown in the colored points below:  
+
+```{r kr_pred_plot, echo = F, include = T, fig.align='center',fig.height=4}
+with(adat,{ 
+     plot(disp,mpg, bty = 'n',xlab='Displacement',ylab='MPG',main = 'Center & Outer X-Location Predictions vs. Data',cex.main = 0.8)
+    points(x = pdat$disp[1], y = pdat$kr_pred[1],  bg = 'red', pch = 23, cex = 1.5)
+    points(x = pdat$disp[2], y = pdat$kr_pred[2],  bg = 'red', pch = 23, cex = 1.5)
+    points(x = pdat$disp[1], y = pdat$spl_pred[1],  bg = 'blue', pch = 21, cex = 1.5)
+    points(x = pdat$disp[2], y = pdat$spl_pred[2],  bg = 'blue', pch = 21, cex = 1.5)
+    legend(300,40,c('Spline','Kernel Regression'),pch = c(21,23) ,bty = 'n',pt.bg = c('blue','red'), cex = 0.8)
+  })
+```
+
+The scatter plot again shows that the spline provides a slightly more conservative predictin vs. the kernal regression. However, both predictions do lie in a reasonable place relative to actual data points observed. 
+
+*3)	Construct the 90% Bias-Corrected Bootstrap CIs for the predictions at the selected 2-sets of x-locations. Show details of the bias-correction process. Compare the CIs at two x-locations, and also from two nonparametric regression methods.*  
+
+Continuing our analysis of prediction at our two $X$-locations, we conduct a bootstrap sampling analysis. The procedure conducted consists of:
+
+1. Taking a boostrap sample, or a uniform sample of observations (selected with replacement)
+2. Fitting a spline or kernel regression model to the boostrap sample data, and 
+3. Predicting *MPG* at the given $X$-locations using the models fit in step 2
+
+To create a more robust bootstrap estimate, we used bias-correction, or *BCa*, a technique similar to a percentile approach to boostrap sampling. However the bootstrap percentiles,but adjusted to account for bias and skewness. Underlying the the *BCa* approach is a notion of acceleration and skewness informing the parameter intervals, and also a connection to the normal distribution, as *BCa* relies on the CDF of a standard normal random variable to compute percentile estimates. The results of the bootstrap analysis are summarized in the table below:  
+
+```{r bca_boot, include =T, echo = F}
+#read in results from a separate script --
+boot_res <- readRDS('/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/boot_res.rds')
+
+knitr::kable(boot_res, caption = 'Bias-Corrected Bootstrap CIs - 90%, By Model Type and X-location',
+             colnames = c('X-Location','Prediction','Lower CI','Upper CI','Model'),digits = 2)
+```
+
+*Note: Due to the computation overhead and instability of the kernel regression fits from the np package, and instability of fits from smooth.spline in R (base), bootstrap confidence intervals were computed based on a limited B = 1000 replications.*
+
+A key point to highlight from this table, is the instability of the kernel regression fits given our dataset. Bootstrap replication actually created non-informative confidence intervals for our kernel regression model, given poor fits of in some boostrap replications. In contrast results from the spine model were more informative, and much narrower, and perhaps precise in comparison to kernel regression. The stability of the spline model in comparison does highlight its utility in this very specific case. 
+
+The bootstrap computational details were somewhat lengthy relative to other routines, and are provided in the *Code Appendix* at the end of this document. 
+
+\newpage
 
 ## Code Appendix
+
+#### Leave-One-Out Procedure, Kernel and Spline Regression
+
+Below is exemplary code utilized in this report to generate additive model fits for both spline, and kernel regression models, along with the leave-one-out procedure. To speed up computation, which can be slow for kernel regression, the routine is distributed across CPUs utilizing the *parallel* library in $R$:
+
+```{r append_loo, echo = T, eval =F }
+#leave one out procedure - spline and kernel regression
+# CPU distributed (10 cores here)
+spl_res <- rbindlist(mclapply(1:nrow(adat), function(i){
+  train <- adat[-i]
+  test <- adat[i]
+  #additive spline fits
+  spl_fit_x1 <- smooth.spline(train$disp,train$mpg, cv= F,df = 3)
+  spl_fit_x2 <- smooth.spline(train$cyl,residuals(spl_fit_x1), cv= F,df = 3)
+  spl_fit_x3 <- smooth.spline(train$accel,residuals(spl_fit_x2), cv= F,df = 3)
+  test <- transform(test, prediction = predict(spl_fit_x1, data.frame(test$disp))$y + 
+                      predict(spl_fit_x2, data.frame(test$cyl))$y + predict(spl_fit_x3, data.frame(test$accel))$y)
+  test$error <- test$mpg - test$prediction #actual vs. estimate
+  test
+}, mc.cores=10))
+
+#this takes 1-2 minutes with 10 cores
+kr_res <- rbindlist(mclapply(1:nrow(adat), function(i){
+  train <- adat[-i]
+  test <- adat[i]
+  #additive kernel reg fits - simplified predict if data.frame is called
+  kr_fit_x1 <- npreg(mpg~disp,gradients = TRUE, data = train)
+  train$e1 <- residuals(kr_fit_x1)
+  kr_fit_x2 <- npreg(e1~cyl,gradients = TRUE, data = train)
+  train$e2 <- residuals(kr_fit_x2)
+  kr_fit_x3 <- npreg(e2~accel,gradients = TRUE, data = train)
+  test$prediction <- predict(kr_fit_x1, newdata = data.frame(disp = test$disp)) + 
+                      predict(kr_fit_x2, newdata = data.frame(cyl = test$cyl)) + 
+                      predict(kr_fit_x3, newdata = data.frame(accel = test$accel))
+  test$error <- test$mpg - test$prediction #actual vs. estimate
+  test
+}, mc.cores=10))
+```
+
+#### Bootstrap Confidence Intervals
+
+Below is exemplary code utilized in this report to generate boostrap confidence intervals using the boot package, relying on the *boot* and *np* packages. Bootstrap sampling procedures were CPU distributed where possible to speed up computation:   
+
+```{r append_boot, eval = F, echo =T}
+B <- 1000 #bootstrap replication count
+#estimator function
+adat <- readRDS('data/auto_mpg.rds')
+cpt <- data.table(disp = median(adat$disp),cyl = median(adat$cyl), accel = median(adat$accel), type = 'center point')
+opt <- data.table(disp = max(adat$disp) - 1,cyl = max(adat$cyl)-1, accel = max(adat$accel) - 1, type = 'outside point')
+spl_boot_cpt <- function(data, indices){
+  #indices <- sample(1:nrow(adat),replace = T)
+  bs_dat <- data[indices]
+  sfit_x1 <- smooth.spline(bs_dat$disp,bs_dat$mpg, cv= F,df = 3)
+  sfit_x2 <- smooth.spline(bs_dat$cyl,residuals(sfit_x1), cv= F,df = 3)
+  sfit_x3 <- smooth.spline(bs_dat$accel,residuals(sfit_x2), cv= F,df = 3)
+  prediction <- as.numeric(predict(sfit_x1, data.frame(cpt$disp))$y +
+                             predict(sfit_x2, data.frame(cpt$cyl))$y + predict(sfit_x3, data.frame(cpt$accel))$y)
+  prediction
+}
+
+spl_boot_opt <- function(data, indices){
+  #indices <- sample(1:nrow(adat),replace = T)
+  bs_dat <- data[indices]
+  sfit_x1 <- smooth.spline(bs_dat$disp,bs_dat$mpg, cv= F,df = 3)
+  sfit_x2 <- smooth.spline(bs_dat$cyl,residuals(sfit_x1), cv= F,df = 3)
+  sfit_x3 <- smooth.spline(bs_dat$accel,residuals(sfit_x2), cv= F,df = 3)
+  prediction <- as.numeric(predict(sfit_x1, data.frame(opt$disp))$y +
+                             predict(sfit_x2, data.frame(opt$cyl))$y + predict(sfit_x3, data.frame(opt$accel))$y)
+  prediction
+}
+
+spl_cpt_res <- boot(adat, statistic = spl_boot_cpt,
+                    R=B)
+spl_opt_res <- boot(adat, statistic = spl_boot_opt,
+                    R=B)
+#bootstrap results - spline
+cpt_results <- boot.ci(boot.out = spl_cpt_res,type = 'bca',conf = 0.9)
+opt_results <- boot.ci(boot.out = spl_opt_res,type = 'bca',conf = 0.9)
+
+boot_spl_bca <- data.table(
+  Point = c('Center Point','Outside Point'),
+  Prediction = c(cpt_results[[2]],opt_results[[2]]),
+  Lower = c(cpt_results$bca[4],opt_results$bca[4]),
+  Upper = c(cpt_results$bca[5],opt_results$bca[5]))
+
+
+
+kr_boot_opt <- function(data, indices){
+  #indices <- sample(1:nrow(adat),replace = T)
+  kdat <- data[indices]
+  kfit_x1 <- npreg(mpg~disp,gradients = TRUE, data = kdat)
+  kdat$e1 <- residuals(kfit_x1)
+  kfit_x2 <- npreg(e1~cyl,gradients = TRUE, data = kdat)
+  kdat$e2 <- residuals(kfit_x2)
+  kfit_x3 <- npreg(e2~accel,gradients = TRUE, data = kdat)
+  prediction <- predict(kfit_x1, newdata = data.frame(disp = opt$disp)) + 
+    predict(kfit_x2, newdata = data.frame(cyl = opt$cyl)) +
+    predict(kfit_x3, newdata = data.frame(accel = opt$accel))
+  prediction
+}
+
+kr_boot_cpt <- function(data, indices){
+  #indices <- sample(1:nrow(adat),replace = T)
+  kdat <- data[indices]
+  kfit_x1 <- npreg(mpg~disp,gradients = TRUE, data = kdat)
+  kdat$e1 <- residuals(kfit_x1)
+  kfit_x2 <- npreg(e1~cyl,gradients = TRUE, data = kdat)
+  kdat$e2 <- residuals(kfit_x2)
+  kfit_x3 <- npreg(e2~accel,gradients = TRUE, data = kdat)
+  prediction <- predict(kfit_x1, newdata = data.frame(disp = cpt$disp)) + 
+    predict(kfit_x2, newdata = data.frame(cyl = cpt$cyl)) +
+    predict(kfit_x3, newdata = data.frame(accel = cpt$accel))
+  prediction
+}
+
+kr_cpt_res <- boot(adat, statistic = kr_boot_cpt,
+                   R=B,parallel = 'multicore',
+                   ncpus = 11)
+kr_opt_res <- boot(adat, statistic = kr_boot_opt,
+                   R=B,parallel = 'multicore',
+                   ncpus = 11)
+
+#bootstrap results - kernel regression
+cpt_kresults <- boot.ci(boot.out = kr_cpt_res,type = 'bca',conf = 0.9)
+opt_kresults <- boot.ci(boot.out = kr_opt_res,type = 'bca',conf = 0.9)
+
+#results summary
+boot_kr_bca <- data.table(
+  Point = c('Center Point','Outside Point'),
+  Prediction = c(cpt_kresults[[2]],opt_kresults[[2]]),
+  Lower = c(cpt_kresults$bca[4],opt_kresults$bca[4]),
+  Upper = c(cpt_kresults$bca[5],opt_kresults$bca[5]))
+
+boot_kr_bca$Method <- 'Kernel Regression'
+boot_spl_bca$Method <- 'Spline'
+boot_sum <- rbindlist(list(boot_kr_bca,boot_spl_bca))
+```
