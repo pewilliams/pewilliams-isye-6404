@@ -350,8 +350,10 @@ Below is exemplary code utilized in this report to generate boostrap confidence 
 B <- 1000 #bootstrap replication count
 #estimator function
 adat <- readRDS('data/auto_mpg.rds')
-cpt <- data.table(disp = median(adat$disp),cyl = median(adat$cyl), accel = median(adat$accel), type = 'center point')
-opt <- data.table(disp = max(adat$disp) - 1,cyl = max(adat$cyl)-1, accel = max(adat$accel) - 1, type = 'outside point')
+cpt <- data.table(disp = median(adat$disp),cyl = median(adat$cyl), 
+                  accel = median(adat$accel), type = 'center point')
+opt <- data.table(disp = max(adat$disp) - 1,cyl = max(adat$cyl)-1, 
+                  accel = max(adat$accel) - 1, type = 'outside point')
 spl_boot_cpt <- function(data, indices){
   #indices <- sample(1:nrow(adat),replace = T)
   bs_dat <- data[indices]
@@ -359,7 +361,8 @@ spl_boot_cpt <- function(data, indices){
   sfit_x2 <- smooth.spline(bs_dat$cyl,residuals(sfit_x1), cv= F,df = 3)
   sfit_x3 <- smooth.spline(bs_dat$accel,residuals(sfit_x2), cv= F,df = 3)
   prediction <- as.numeric(predict(sfit_x1, data.frame(cpt$disp))$y +
-                             predict(sfit_x2, data.frame(cpt$cyl))$y + predict(sfit_x3, data.frame(cpt$accel))$y)
+                             predict(sfit_x2, data.frame(cpt$cyl))$y + 
+                             predict(sfit_x3, data.frame(cpt$accel))$y)
   prediction
 }
 
@@ -370,7 +373,8 @@ spl_boot_opt <- function(data, indices){
   sfit_x2 <- smooth.spline(bs_dat$cyl,residuals(sfit_x1), cv= F,df = 3)
   sfit_x3 <- smooth.spline(bs_dat$accel,residuals(sfit_x2), cv= F,df = 3)
   prediction <- as.numeric(predict(sfit_x1, data.frame(opt$disp))$y +
-                             predict(sfit_x2, data.frame(opt$cyl))$y + predict(sfit_x3, data.frame(opt$accel))$y)
+                             predict(sfit_x2, data.frame(opt$cyl))$y + 
+                             predict(sfit_x3, data.frame(opt$accel))$y)
   prediction
 }
 
