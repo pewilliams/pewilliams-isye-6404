@@ -34,7 +34,19 @@ suppressPackageStartupMessages(library(reshape2))
 
 ## 1. Wavelets (50%)
 
-*Locate a one-dimensional data set that has sharp-changes like those presented in the recent lectures for applying the following wavelet procedures. It is best that the data size is larger than 512, and is in 2-factorial, e.g., 210 = 1024.  Note that you need to locate proper R-package/codes to perform the tasks below. *
+*Locate a one-dimensional data set that has sharp-changes like those presented in the recent lectures for applying the following wavelet procedures. It is best that the data size is larger than 512, and is in 2-factorial, e.g., 210 = 1024.  Note that you need to locate proper R-package/codes to perform the tasks below.*  
+
+
+For these exercises a dataset was located from the data science competition website, Kaggle (https://www.kaggle.com/datasets). The dataset consists of estimated energy consumption in Megawatts (MW) by hour provided by American Electric Power (AEP). AEP is a major investor-owned electric utility in the United States of America, which provides electricity to more than five million customers in 11 states including Texas and Ohio. 
+
+To simplify subsequent wavelet analysis, a subset of the original dataset was utilized. It consists of $n = 1024$ observations of hourly Megawatt consumption estimates beginning from 9:00am June 21st, 2018 to 12:00am August 3rd, 2018. A preview of the original dataset is shown below:  
+
+```{r wave_dat, include = T, echo = F}
+aedat <- fread('/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/AEP_hourly.csv', 
+                  header = T, stringsAsFactors = F)
+aep <- aedat[(nrow(aedat) - 1024 + 1):nrow(aedat)]
+knitr::kable(head(aep), caption = 'AEP Hourly Energy Consumption in Megawatts', col.names = c('Hourly  (Datetime)', 'Energy Usage (MW)'),format.args = list(big.mark = ','))
+```
 
 *i)	Select two families of wavelets for completing the two tasks ii) and iii) below, and make comparisons for the results impacted from distinct wavelet families.*
 
