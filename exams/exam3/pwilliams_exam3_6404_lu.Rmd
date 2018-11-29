@@ -30,6 +30,7 @@ suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(np))
 suppressPackageStartupMessages(library(parallel))
 suppressPackageStartupMessages(library(reshape2))
+suppressPackageStartupMessages(library(waveslim))
 ```
 
 ## 1. Wavelets (50%)
@@ -52,11 +53,72 @@ knitr::kable(head(aep), caption = 'AEP Hourly Energy Consumption in Megawatts', 
 
 *ii)	Show a multi-resolution plot of mother and father discrete wavelet-coefficients (DWTs), and make comments about their values.*
 
-*iii)	Apply two thresholding/shrinkage methods to reduce number of non-zero DWT coefficients. Apply the IDWT to reconstruct the original data signal by using the thresholded DWTs. Comment on the quality of the reconstructions from plotting the original and reconstructed signals (by overlaying them in one figure). Compare the two methods about their data-reduction ratios and the MSEs.*
+A multi-resolution plot, including the original time series of energy consumption data, provides a lot of context on the data. The plot of the original data shown below highlights significant shifts in energy consumption in the time series, and a persistent daily cyclical pattern. 
 
-*iv)	Artificially alter the data in one “local-region” and one large-size “global region” for creating 3 distinct “fault-class” data sets. See lecture presentation about details of this task.  Apply the best thresholding method (and the best wavelet-family) to model the data from all FOUR classes (one from the original data and the other 3 fault-class data). Use the multi-resolution plots of thresholded-DWTs to see how they are different in these FOUR classes of data signals.*
+To contrast the multi-resolution plots below, we have selected both the 'Haar' and 'Daubechies' filters for comparison in each column. For visual simplicity and interpretation both plots rely on 4 levels, or depth in terms of signal reconstruction. The MRA plot quickly highlights, for both families, that for the first scaling level $S2$, we have a good representation of the original function, that at further depth the signals are much noisier. Also worth noting is the contrast in smoothness of the 'Daubechies' first level decomposition vs. the 'Haar'. In fact the first level for the 'Daubechies' family captures more of the original signal, as the magnitude, or scale of signals at lower levels is tighter relative to the 'Haar' decomposition, as shown below: 
 
-*v)	Discuss the possibility and steps for developing a rigorous decision-making procedure to detect faulty-signals against the original data, and distinguish classes of faulty signals with reduced-size data presented by thresholded DWTs.*
+```{r mra_plots_haar, include = T, echo = F, fig.align='center', fig.height=8}
+x <- as.numeric(aep$AEP_MW) #input megawatts time series
+#mra.out <- mra(X =  x, n.levels = 4, filter = 'haar', method = 'dwt')
+
+n.levels <- 4
+aep.haar <- mra(x = x, "haar", n.levels, "dwt")
+#names(aep.haar) <- c("d1", "d2", "d3", "d4", "s4")
+nplots <- n.levels + 2
+par(mfcol=c(nplots,2), pty="m", mar=c(5-2.5,4,4-2,1.5), cex.main = 0.9)
+plot.ts(x, axes=F, main="Haar Filter: Multi-Resolution Plot", ylab = 'Original', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(x),digits = -4),round(max(x),digits = -4)), 
+     labels=c(round(min(x),digits = -4),round(max(x),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(aep.haar[[i]], axes=F, ylab=names(aep.haar)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)), 
+       labels=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)))
+}
+
+aep.haar <- mra(x = x, "la8", n.levels, "dwt")
+#names(aep.haar) <- c("d1", "d2", "d3", "d4", "s4")
+nplots <- n.levels + 2
+#par(mfcol=c(nplots,1), pty="m", mar=c(5-3.5,4,4-2,1.5))
+plot.ts(x, axes=F, main="Daubechies Filter (L=8): Multi-Resolution Plot", ylab = 'Original', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(x),digits = -4),round(max(x),digits = -4)), 
+     labels=c(round(min(x),digits = -4),round(max(x),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(aep.haar[[i]], axes=F, ylab=names(aep.haar)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+       labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)), 
+       labels=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)))
+}
+```
+
+*Note: To generate these plots, the 'waveslim' package was utilized in $R$, using the "mra" function with method "DWT" supplied as an argument which provides an additive decomposition of the original time series. Futher details are provided in the appendix.*  
+
+\newpage
+
+*iii)	Apply two thresholding/shrinkage methods to reduce number of non-zero DWT coefficients. Apply the IDWT to reconstruct the original data signal by using the thresholded DWTs. Comment on the quality of the reconstructions from plotting the original and reconstructed signals (by overlaying them in one figure). Compare the two methods about their data-reduction ratios and the MSEs.* 
+
+```{r thresh_comps, include = T, echo = F}
+#thresholding https://cran.r-project.org/web/packages/waveslim/waveslim.pdf
+wv <- dwt(x, wf="haar", n.levels=4, boundary="periodic")
+# da.thresh(wv, alpha = .1, max.level = 4, verbose = T, return.thresh = T)
+# hybrid.thresh(wv, max.level = 4, verbose = FALSE, seed = 0)
+# manual.thresh(wv, max.level = 4, 0.1, hard = TRUE)
+# sure.thresh(wv, max.level = 4, hard = TRUE)
+# universal.thresh(wv, max.level = 4, hard = TRUE)
+# universal.thresh.modwt(wv, max.level = 4, hard = TRUE)
+```
+
+*iv)	Artificially alter the data in one “local-region” and one large-size “global region” for creating 3 distinct “fault-class” data sets. See lecture presentation about details of this task.  Apply the best thresholding method (and the best wavelet-family) to model the data from all FOUR classes (one from the original data and the other 3 fault-class data). Use the multi-resolution plots of thresholded-DWTs to see how they are different in these FOUR classes of data signals.*  
+
+
+*v)	Discuss the possibility and steps for developing a rigorous decision-making procedure to detect faulty-signals against the original data, and distinguish classes of faulty signals with reduced-size data presented by thresholded DWTs.*  
+
 
 
 ## 2. Categorical Data Analysis (25%)
@@ -306,7 +368,7 @@ knitr::kable(boot_res, caption = 'Bias-Corrected Bootstrap CIs - 90%, By Model T
              colnames = c('X-Location','Prediction','Lower CI','Upper CI','Model'),digits = 2)
 ```
 
-*Note: Due to the computation overhead and instability of the kernel regression fits from the np package, and instability of fits from smooth.spline in R (base), bootstrap confidence intervals were computed based on a limited B = 1000 replications.*
+*Note: Instability of the kernel regression fits from the np package, and instability of fits from smooth.spline in R (base) were both problematic due to sample size, and computation speed constraints further analysis would have likely yielded more stable results.*
 
 A key point to highlight from this table, is the instability of the kernel regression fits given our dataset. Bootstrap replication actually created non-informative confidence intervals for our kernel regression model, given poor fits of in some boostrap replications. In contrast results from the spine model were more informative, and much narrower, and perhaps precise in comparison to kernel regression. The stability of the spline model in comparison does highlight its utility in this very specific case. 
 
@@ -316,6 +378,46 @@ The bootstrap computational details were somewhat lengthy relative to other rout
 
 ## Code Appendix
 
+#### Multi-resolution Plot Generation (waveslim)
+
+The code below demonstrates procedures to plot the additive components of a wavelet decomposition using the *waveslim* package in $R$. Note this code depends on usage of a time series exactly $1024$ observations in length:   
+
+```{r append_mra, echo = T, eval =F }
+x <- as.numeric(aep$AEP_MW) #input megawatts time series
+
+n.levels <- 4
+aep.haar <- mra(x = x, "haar", n.levels, "dwt")
+nplots <- n.levels + 2
+par(mfcol=c(nplots,2), pty="m", mar=c(5-2.5,4,4-2,1.5), cex.main = 0.9)
+plot.ts(x, axes=F, main="Haar Filter: Multi-Resolution Plot", ylab = 'Original', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(x),digits = -4),round(max(x),digits = -4)), 
+     labels=c(round(min(x),digits = -4),round(max(x),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(aep.haar[[i]], axes=F, ylab=names(aep.haar)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)), 
+       labels=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)))
+}
+
+#family daubechies
+aep.la8 <- mra(x = x, "la8", n.levels, "dwt")
+plot.ts(x, axes=F, main="Daubechies Filter (L=8): Multi-Resolution Plot", ylab = 'Original', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(x),digits = -4),round(max(x),digits = -4)), 
+     labels=c(round(min(x),digits = -4),round(max(x),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(aep.la8[[i]], axes=F, ylab=names(aep.la8)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+       labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(aep.la8[[i]]),digits = -2),round(max(aep.la8[[i]]),digits = -2)), 
+       labels=c(round(min(aep.la8[[i]]),digits = -2),round(max(aep.la8[[i]]),digits = -2)))
+}
+```
+  
 #### Leave-One-Out Procedure, Kernel and Spline Regression
 
 Below is exemplary code utilized in this report to generate additive model fits for both spline, and kernel regression models, along with the leave-one-out procedure. To speed up computation, which can be slow for kernel regression, the routine is distributed across CPUs utilizing the *parallel* library in $R$:
