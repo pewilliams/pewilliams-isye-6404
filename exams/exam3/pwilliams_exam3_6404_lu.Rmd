@@ -1,6 +1,6 @@
 ---
 title: |
-  | \vspace{3cm} \LARGE{6404 Take-home Exam 3: Wavelets, Categorical Data Analysis, Nonparametric Regression}
+  | \vspace{3cm} \LARGE{6404 Take-home Exam 3: Wavelets, Categorical Data Analysis, and Nonparametric Regression}
 author:
 - Peter Williams, pwilliams60@gatech.edu
 
@@ -19,6 +19,8 @@ header-includes:
   - \postauthor{\end{flushleft}}
   - \predate{\begin{flushleft}}
   - \postdate{\end{flushleft}}
+  - \usepackage{caption} 
+  - \captionsetup[table]{skip=10pt}
 ---
 
 \newpage
@@ -31,6 +33,8 @@ suppressPackageStartupMessages(library(np))
 suppressPackageStartupMessages(library(parallel))
 suppressPackageStartupMessages(library(reshape2))
 suppressPackageStartupMessages(library(waveslim))
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(xtable))
 ```
 
 ## 1. Wavelets (50%)
@@ -65,7 +69,7 @@ n.levels <- 4
 aep.haar <- mra(x = x, "haar", n.levels, "dwt")
 #names(aep.haar) <- c("d1", "d2", "d3", "d4", "s4")
 nplots <- n.levels + 2
-par(mfcol=c(nplots,2), pty="m", mar=c(5-2.5,4,4-2,1.5), cex.main = 0.9)
+par(mfcol=c(nplots,2), pty="m", mar=c(5-2.5,4,4-2,1), cex.main = 0.9, cex.axis=0.8)
 plot.ts(x, axes=F, main="Haar Filter: Multi-Resolution Plot", ylab = 'Original', bty='n')
 axis(side=1, at=seq(0,1024,by=128), 
      labels=seq(0,1024,by=128))
@@ -103,23 +107,181 @@ for(i in 1:(n.levels +1)){
 
 *iii)	Apply two thresholding/shrinkage methods to reduce number of non-zero DWT coefficients. Apply the IDWT to reconstruct the original data signal by using the thresholded DWTs. Comment on the quality of the reconstructions from plotting the original and reconstructed signals (by overlaying them in one figure). Compare the two methods about their data-reduction ratios and the MSEs.* 
 
-```{r thresh_comps, include = T, echo = F}
+To reduce the number of non-zero DWT coefficients, we rely on two popular shrinkage methodologies to find smooth representations of our original series. We utilize the *SURE* and *VisuShrink* thresholding methodologies, described by Donoho and Johnstone in their 1995 pager *Adapting to Unknown Smoothness via Wavelet Shrinkage*. We apply thresholding on our DWT that utilized 4 levels, and the Daubechies Filter described above. A very brief of these thresholding methodologies is provided here: 
+
+The *VisuShrink* approach to thresholding relies on an estimate of the noise level of wavelet coefficients denoted $\hat{\sigma}$. $\hat{\sigma}$ is often implemented as a scaled median absolute deviation the realized wavelet coefficients. The thresholding itself is shown as, *$T_{UV} = \sqrt{2(log\ n)\hat{\sigma}}$ where $n$ is the number of data points, and $\hat{\sigma}$ is as described above.   
+
+The *SURE* methodology utilizes Stein's unbiased risk estimation, as described by by Donoho and Johnstone in their paper. This methodology creates a threshold rule $t_j$ for each resolution level $j$ in a wavelet transform, and is found using cross-validation.  
+
+To constrast these two thresholding approaches, we plot the original signal in the figures below, against the reconstructed signal post-thresholding out DWT: 
+
+```{r thresh_comps, include = T, echo = F, fig.align='center',fig.height=6}
 #thresholding https://cran.r-project.org/web/packages/waveslim/waveslim.pdf
-wv <- dwt(x, wf="haar", n.levels=4, boundary="periodic")
-# da.thresh(wv, alpha = .1, max.level = 4, verbose = T, return.thresh = T)
-# hybrid.thresh(wv, max.level = 4, verbose = FALSE, seed = 0)
-# manual.thresh(wv, max.level = 4, 0.1, hard = TRUE)
-# sure.thresh(wv, max.level = 4, hard = TRUE)
-# universal.thresh(wv, max.level = 4, hard = TRUE)
-# universal.thresh.modwt(wv, max.level = 4, hard = TRUE)
+wv <- dwt(x, wf="la8", n.levels=4, boundary="periodic")
+sure <- sure.thresh(wv, max.level = 3, hard =TRUE)
+visu <- universal.thresh(wv, max.level = 3, hard = TRUE)
+par(mfrow = c(2,1), cex.lab = 0.8)
+
+plot(1:length(x), x, type = 'l', lwd = 4.5, bty = 'n', col = 'gray', ylim = c(8000,23000), 
+     main = 'Wavelet Reconstruction: SURE Threshold', cex.main= 0.8, xlab = 'Hour',ylab='Energy Consumption')
+lines(1:length(x), idwt(sure), col = 'navy', lty = 1, lwd = 1.4)
+legend(80, 11200, c('Original Signal','Wavelet Reconstruction'), 
+       col = c('gray','navy'), lty = 1, lwd = c(4.5,2.2), bty = 'n', cex = 0.6)
+
+plot(1:length(x), x, type = 'l', lwd = 4.5, bty = 'n', col = 'gray',ylim = c(8000,23000), 
+     main = 'Wavelet Reconstruction: VisuShrink Threshold', cex.main = 0.8,xlab = 'Hour',ylab='Energy Consumption')
+lines(1:length(x), idwt(visu), col = 'navy', lty = 1, lwd = 1.4)
+#idwt(sure)
 ```
+
+Visually it is quite clear the *VisuShrink* thresholding approach provides a more representative reconstruction of the original signal. The *SURE* approach is clearly less smooth, but has a slightly higher data reduction ratio which is shown in summary in the table below. We also provide summaries of the mean squared error (MSE), the root mean squared error (RMSE, which can be more easily interpreted on the original data scale), along with the data reduction ratio (%), which is computed as $100 \cdot (1 - \frac{\#\text{non-zero DWT Coefficients} }{\# \text{Original Observations}})$:  
+
+```{r sample, echo=FALSE, results='asis'}
+#thresholding https://cran.r-project.org/web/packages/waveslim/waveslim.pdf
+#data reduction ratios
+dr_sum <- data.frame(
+  threshold = c('SURE','VisuShrink'),
+  ratio = 100*round(c(1 - (sum(unlist(lapply(sure, function(x) sum(x != 0))))/1024),
+    (1-sum(unlist(lapply(visu, function(x) sum(x != 0))))/1024)),digits = 4)
+)
+
+#mses
+mse_sum <- data.frame(
+  threshold = c('SURE','VisuShrink'),
+  mse = round(c(mean((x - idwt(sure))^2),
+mean((x - idwt(visu))^2)),digits = 1), stringsAsFactors =F)
+
+rmse_sum <- data.frame(
+  threshold = c('SURE','VisuShrink'),
+  rmse = round(c(sqrt(mean((x - idwt(sure))^2)),
+sqrt(mean((x - idwt(visu))^2))),digits = 1), stringsAsFactors =F)
+
+t1 <- kable(mse_sum, format = "latex",booktabs = TRUE)
+t2 <- kable(rmse_sum, format = "latex",booktabs = TRUE)
+t3 <- kable(dr_sum, format = "latex" ,booktabs = TRUE, col.names = c('threshold','ratio (%)'))
+
+cat(c("\\begin{table}[!htb]
+    \\begin{minipage}{.3\\linewidth}
+      \\caption{MSE Results}
+      \\centering",
+        t1,
+    "\\end{minipage}%
+    \\begin{minipage}{.33\\linewidth}
+      \\centering
+        \\caption{RMSE Results}",
+        t2,
+        "\\end{minipage}%
+    \\begin{minipage}{.3\\linewidth}
+      \\centering
+        \\caption{Reduction Ratio}",
+        t3,
+    "\\end{minipage} 
+\\end{table}"
+)) 
+```
+
+  
+Comment on the results from the tables above. 
 
 *iv)	Artificially alter the data in one “local-region” and one large-size “global region” for creating 3 distinct “fault-class” data sets. See lecture presentation about details of this task.  Apply the best thresholding method (and the best wavelet-family) to model the data from all FOUR classes (one from the original data and the other 3 fault-class data). Use the multi-resolution plots of thresholded-DWTs to see how they are different in these FOUR classes of data signals.*  
 
+To create our fault class datasets, we replicated our original data and added some artificial alterations. As shown in the figure below for 'Case 1', we added random noise to the original signal, specifically $N(0,\sigma^2)$, with $\sigma = 2000$, given the scale of our original data. For 'Case 2', we shifted our original series by 25 time units to the right, added a small amount of noise $\sigma = 10$, and appended a sequence of values equal to the sample mean to the front of the series. Finally for 'Case 3', we added a small 'U' shaped curve from observations $375-436$, and added a small amount of noise. Comparisons of our altered series and the original series are shown below: 
+
+```{r create_fc, include = T, echo = F, fig.align = 'center',fig.height=5}
+f1 <-  x + rnorm(2^10, sd = 2000) #noisy original signal
+f2 <-  c(rep(mean(x), 30), x[31:1024]) + rnorm(2^10, sd = 10) #shift right 25 positions add sigma 1 - global change
+f3 <- c(x[1:374],x[375] + seq(-15,15,by=0.5)^2,x[436:1024]) + rnorm(2^10, sd = 10)
+par(mfrow = c(2,2), cex.main = 0.85)
+plot(f1, type = 'l', bty = 'n', main = 'Case 1', xlab = 'Time', ylab = 'Energy') 
+plot(f2, type = 'l', bty = 'n', main = 'Case 2', xlab = 'Time', ylab = 'Energy') 
+plot(f3, type = 'l', bty = 'n', main = 'Case 3', xlab = 'Time', ylab = 'Energy') 
+plot(x, type = 'l', bty = 'n', main = 'Original Signal', xlab = 'Time', ylab = 'Energy') 
+```
+
+To explore how these artificial faults classes differ in their wavelet decomposition we can look at their respective multi-resolution plots, all using 2 resolution levels to simplify and condense visualizations: 
+
+```{r fault_mra1, include = T, echo = F, fig.align='center',fig.height=8}
+n.levels <- 1
+
+#names(aep.haar) <- c("d1", "d2", "d3", "d4", "s4")
+nplots <- n.levels + 2
+par(mfcol=c(nplots*2,2), pty="m", mar=c(5-2.5,4,4-2,1), cex.main = 0.9, cex.axis=0.8)
+
+f1.dau <- mra(x = f1, "la8", n.levels, "dwt")
+plot.ts(f1, axes=F, main="Fault Class 1: Multi-Resolution Plot", ylab = 'F1', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(f1),digits = -4),round(max(f1),digits = -4)), 
+     labels=c(round(min(f1),digits = -4),round(max(f1),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(f1.dau[[i]], axes=F, ylab=names(f1.dau)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(f1.dau[[i]]),digits = -2),round(max(f1.dau[[i]]),digits = -2)), 
+       labels=c(round(min(f1.dau[[i]]),digits = -2),round(max(f1.dau[[i]]),digits = -2)))
+}
+
+f3.dau <- mra(x = f3, "la8", n.levels, "dwt")
+plot.ts(f3, axes=F, main="Fault Class 3: Multi-Resolution Plot", ylab = 'F3', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(f3),digits = -4),round(max(f3),digits = -4)), 
+     labels=c(round(min(f3),digits = -4),round(max(f3),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(f3.dau[[i]], axes=F, ylab=names(f3.dau)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(f3.dau[[i]]),digits = -2),round(max(f3.dau[[i]]),digits = -2)), 
+       labels=c(round(min(f3.dau[[i]]),digits = -2),round(max(f3.dau[[i]]),digits = -2)))
+}
+
+f2.dau <- mra(x = f2, "la8", n.levels, "dwt")
+plot.ts(f2, axes=F, main="Fault Class 2: Multi-Resolution Plot", ylab = 'F2', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(f2),digits = -4),round(max(f2),digits = -4)), 
+     labels=c(round(min(f2),digits = -4),round(max(f2),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(f2.dau[[i]], axes=F, ylab=names(f2.dau)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(f2.dau[[i]]),digits = -2),round(max(f2.dau[[i]]),digits = -2)), 
+       labels=c(round(min(f2.dau[[i]]),digits = -2),round(max(f2.dau[[i]]),digits = -2)))
+}
+
+aep.la8 <- mra(x = x, "la8", n.levels, "dwt")
+#par(mfcol=c(nplots,1), pty="m", mar=c(5-3.5,4,4-2,1.5))
+plot.ts(x, axes=F, main="Original Signal: Multi-Resolution Plot", ylab = 'Original', bty='n')
+axis(side=1, at=seq(0,1024,by=128), 
+     labels=seq(0,1024,by=128))
+axis(side=2, at=c(round(min(x),digits = -4),round(max(x),digits = -4)), 
+     labels=c(round(min(x),digits = -4),round(max(x),digits = -4)))
+for(i in 1:(n.levels +1)){
+  plot.ts(aep.la8[[i]], axes=F, ylab=names(aep.la8)[i],bty='n')
+  axis(side=1, at=seq(0,1024,by=128), 
+       labels=seq(0,1024,by=128))
+  axis(side=2, at=c(round(min(aep.la8[[i]]),digits = -2),round(max(aep.la8[[i]]),digits = -2)), 
+       labels=c(round(min(aep.la8[[i]]),digits = -2),round(max(aep.la8[[i]]),digits = -2)))
+}
+```
+   
+*Note: DWT decomposition performed using 'Daubechies' filter.*  
+
+The multi-resolution plots above provide visual indications of differences across fault classes. For example, at the 'D1' resolution level, both the shifted fault class, 'Fault Class 2', and the artificially altered series 'Fault Class 3' show significant spikes in coefficient estimate level around the area of the signal where the series was altered. 'Fault Class' which was altered with a larger magnitude of noise, has significantly larger estimates across the entire signal for wavelet coefficients at level 'D1'. These visual difference highlight a possibility of classifying fault classes based on features that can be extracted from values of the wavelet coefficient estimates are various levels. This topic will be explored further in the next section. 
 
 *v)	Discuss the possibility and steps for developing a rigorous decision-making procedure to detect faulty-signals against the original data, and distinguish classes of faulty signals with reduced-size data presented by thresholded DWTs.*  
 
+In the paper *Wavelet-Based Data Reduction Techniques for Process Fault Detection* (2006), Jeong and Lu et al. provide in-depth discussion on decision-making procedures for distinguishing classes of faulty signals with reduced size dataset. Based on the discussion in that and paper and our results from above, a decision-making procedure to detect and distinguish classes of faulty-signals should leverage: 
 
+* A structured data generation process to support a diverse, and representation or population of fault-type classifications
+ + In order to detect and distinguish classes of faulty signal, data should be generated that form a diverse set of classes representative of what faulty signals may look like
+  + A variety of techniques of generating faulty-classes are described by Jeong and Lu et al. include adding random noise existing datasets, adding artificial features and curves, and shifting time series etc.
+
+* Features of the original data that are estimated from the multi-resolution decomposition, for example: 
+ + Coarse level wavelet coefficients can be used to identify faults that relate to global faults related to the shape of the original data series relative to new signals
+  + Granular wavelet coefficients, represented at lower levels of the decomposition can be used to identify faults that related local and global faults representing faults smaller in magnitude relative to the dominant signal patterns
+  
+To undertake these tasks described programmatically, Jeong and Lu et al. utilize a classification and regression tree (CART) to classify datasets into fault classes by relying on estimates of wavelet coefficients at different resolution levels in the signal decomposition of both faulty, and original signals. Undertaking a decision-making process 
 
 ## 2. Categorical Data Analysis (25%)
 
@@ -132,21 +294,19 @@ To discuss the Chi-square goodness of fit procedure, a dataset published by the 
 ```{r ch_gof, include = T, echo =F}
 hdat <- read.table(file = '/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/data/hurricane-frequencies.txt',header=T,stringsAsFactors=F)
 hdat <- transform(hdat, Expected_Count = round(sum(Count)/nrow(hdat),digits = 3))
+T_stat <- round(sum((hdat$Count - hdat$Expected_Count)^2 / hdat$Expected_Count),digits = 3)
+p_value <- round(1 - pchisq(T_stat, df = nrow(hdat)-1),digits=3)
 knitr::kable(hdat, caption = 'NOAA: Continental United States: Hurricane Impacts/Landfalls', col.names = c('Decade','Count of Impacts','Expected Impacts'))
 ```
    
 *Source: Continental United States Hurricane Impacts/Landfalls by decade as reported by the NOAA http://www.aoml.noaa.gov/hrd/hurdat/All_U.S._Hurricanes.html*
 
-Given the overall national interest in climate change, and its impact on weather patterns, it is of interest to many researchers if the frequency of hurricane landfalls in recent years in increasing. Given the dataset shown above, we can test this hypothesis in a crude way utilizing differences in observed vs. expected frequency of hurricane landfall. Where $n_i$ refers to observed counts across $i = 1,...,k$ decades measured, and $N = \sum_{=1}^{k} n_i$, is the total number of observed landfalls. We can then set up our test:  
+Given the overall national interest in climate change, and its impact on weather patterns, it is of interest to many researchers if the frequency of hurricane landfalls in recent years in increasing. Given the dataset shown above, we can test this hypothesis in a crude way utilizing differences in observed vs. expected frequency of hurricane landfall. Where $n_i$ refers to observed counts across $i = 1,...,k$ decades measured, and $N = \sum_{=1}^{k} n_i$, is the total number of observed landfalls. We can then set up our test:
+$$H_0: F_X(x) = F_0(x),\ H_{\alpha}: F_X(x) \neq F_0(x)$$       
 
-$H_0: F_X(x) = F_0(x)$    
-$H_{\alpha}: F_X(x) \neq F_0(x)$   
+We then take our test statistic $T$ to be, $T = \sum_{i}^{r} \frac{(n_i - np_i)^2}{np_i}$, which is approximately distributed $T \sim \chi_{r-1}^2$.   
 
-```{r gof_comp, include = T, echo = F}
-T_stat <- round(sum((hdat$Count - hdat$Expected_Count)^2 / hdat$Expected_Count),digits = 3)
-p_value <- round(1 - pchisq(T_stat, df = nrow(hdat)-1),digits=3)
-```
-And then take our test statistic $T$ to be, $T = \sum_{i}^{r} \frac{(n_i - np_i)^2}{np_i}$, which is approximately distributed $T \sim \chi_{r-1}^2$. Jumping into actual calculations, we have $T = \frac{(18 - np_1)^2}{np_1} + \frac{(15 - np_2)^2}{np_2} + ... + \frac{(19 - np_6)^2}{np_6} =$ `r T_stat`, where $np_i = 15 \frac{2}{3}$, for $i = 1,...,6$. Under our $H_0$, our p-value is `r p_value`, not sufficient evidence to reject our $H_0$ and conclude that hurricane landfalls are different across decades, but perhaps a contentious talking point in conversation. Obviously the scope and depth of the analysis here isn't sufficient to add meaningfully to the overall discussion about climate change. 
+Jumping into actual calculations, we have $T = \frac{(18 - np_1)^2}{np_1} + \frac{(15 - np_2)^2}{np_2} + ... + \frac{(19 - np_6)^2}{np_6} =$ `r T_stat`, where $np_i = 15 \frac{2}{3}$, for $i = 1,...,6$. Under our $H_0$, our p-value is `r p_value`, not sufficient evidence to reject our $H_0$ and conclude that hurricane landfalls are different across decades, but perhaps a contentious talking point in conversation. Obviously the scope and depth of the analysis here isn't sufficient to add meaningfully to the overall discussion about climate change.   
 
 *2. Contingency tables, testing for homogeneity and independence*
 
@@ -378,7 +538,7 @@ The bootstrap computational details were somewhat lengthy relative to other rout
 
 ## Code Appendix
 
-#### Multi-resolution Plot Generation (waveslim)
+#### Multi-resolution Plot Generation Example (R package: *waveslim*)
 
 The code below demonstrates procedures to plot the additive components of a wavelet decomposition using the *waveslim* package in $R$. Note this code depends on usage of a time series exactly $1024$ observations in length:   
 
@@ -461,7 +621,7 @@ kr_res <- rbindlist(mclapply(1:nrow(adat), function(i){
 Below is exemplary code utilized in this report to generate boostrap confidence intervals using the boot package, relying on the *boot* and *np* packages. Bootstrap sampling procedures were CPU distributed where possible to speed up computation:   
 
 ```{r append_boot, eval = F, echo =T}
-B <- 1000 #bootstrap replication count
+B <- 10000 #bootstrap replication count
 #estimator function
 adat <- readRDS('data/auto_mpg.rds')
 cpt <- data.table(disp = median(adat$disp),cyl = median(adat$cyl), 
