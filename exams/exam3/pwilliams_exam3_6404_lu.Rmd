@@ -1,6 +1,6 @@
 ---
 title: |
-  | \vspace{3cm} \LARGE{6404 Take-home Exam 3: Wavelets, Categorical Data Analysis, and Nonparametric Regression}
+  | \vspace{3cm} \LARGE{Exam 3: Wavelets, Categorical Data Analysis, and Nonparametric Regression}
 author:
 - Peter Williams, pwilliams60@gatech.edu
 
@@ -40,7 +40,6 @@ suppressPackageStartupMessages(library(xtable))
 ## 1. Wavelets (50%)
 
 *Locate a one-dimensional data set that has sharp-changes like those presented in the recent lectures for applying the following wavelet procedures. It is best that the data size is larger than 512, and is in 2-factorial, e.g., 210 = 1024.  Note that you need to locate proper R-package/codes to perform the tasks below.*  
-
 
 For these exercises a dataset was located from the data science competition website, Kaggle (https://www.kaggle.com/datasets). The dataset consists of estimated energy consumption in Megawatts (MW) by hour provided by American Electric Power (AEP). AEP is a major investor-owned electric utility in the United States of America, which provides electricity to more than five million customers in 11 states including Texas and Ohio. 
 
@@ -125,7 +124,7 @@ par(mfrow = c(2,1), cex.lab = 0.8)
 plot(1:length(x), x, type = 'l', lwd = 4.5, bty = 'n', col = 'gray', ylim = c(8000,23000), 
      main = 'Wavelet Reconstruction: SURE Threshold', cex.main= 0.8, xlab = 'Hour',ylab='Energy Consumption')
 lines(1:length(x), idwt(sure), col = 'navy', lty = 1, lwd = 1.4)
-legend(80, 11200, c('Original Signal','Wavelet Reconstruction'), 
+legend(80, 12000, c('Original Signal','Wavelet Reconstruction'), 
        col = c('gray','navy'), lty = 1, lwd = c(4.5,2.2), bty = 'n', cex = 0.6)
 
 plot(1:length(x), x, type = 'l', lwd = 4.5, bty = 'n', col = 'gray',ylim = c(8000,23000), 
@@ -181,13 +180,13 @@ cat(c("\\begin{table}[!htb]
 ```
 
   
-Comment on the results from the tables above. 
+*MSE*, *RMSE* results provide further confirmation of the *VisuShrink* thresholding method's ability to provide a more accurate reconstruction of the original signal. Despite having a slightly lower reduction ratio, *VisuShrink* provides this improved reconstruction without a significant loss, with only a $\sim 7$ percent difference vs. the *SURE* methodology. 
 
 *iv)	Artificially alter the data in one “local-region” and one large-size “global region” for creating 3 distinct “fault-class” data sets. See lecture presentation about details of this task.  Apply the best thresholding method (and the best wavelet-family) to model the data from all FOUR classes (one from the original data and the other 3 fault-class data). Use the multi-resolution plots of thresholded-DWTs to see how they are different in these FOUR classes of data signals.*  
 
 To create our fault class datasets, we replicated our original data and added some artificial alterations. As shown in the figure below for 'Case 1', we added random noise to the original signal, specifically $N(0,\sigma^2)$, with $\sigma = 2000$, given the scale of our original data. For 'Case 2', we shifted our original series by 25 time units to the right, added a small amount of noise $\sigma = 10$, and appended a sequence of values equal to the sample mean to the front of the series. Finally for 'Case 3', we added a small 'U' shaped curve from observations $375-436$, and added a small amount of noise. Comparisons of our altered series and the original series are shown below: 
 
-```{r create_fc, include = T, echo = F, fig.align = 'center',fig.height=5}
+```{r create_fc, include = T, echo = F, fig.align = 'center',fig.height=4}
 f1 <-  x + rnorm(2^10, sd = 2000) #noisy original signal
 f2 <-  c(rep(mean(x), 30), x[31:1024]) + rnorm(2^10, sd = 10) #shift right 25 positions add sigma 1 - global change
 f3 <- c(x[1:374],x[375] + seq(-15,15,by=0.5)^2,x[436:1024]) + rnorm(2^10, sd = 10)
@@ -273,15 +272,15 @@ The multi-resolution plots above provide visual indications of differences acros
 
 In the paper *Wavelet-Based Data Reduction Techniques for Process Fault Detection* (2006), Jeong and Lu et al. provide in-depth discussion on decision-making procedures for distinguishing classes of faulty signals with reduced size dataset. Based on the discussion in that and paper and our results from above, a decision-making procedure to detect and distinguish classes of faulty-signals should leverage: 
 
-* A structured data generation process to support a diverse, and representation or population of fault-type classifications
- + In order to detect and distinguish classes of faulty signal, data should be generated that form a diverse set of classes representative of what faulty signals may look like
-  + A variety of techniques of generating faulty-classes are described by Jeong and Lu et al. include adding random noise existing datasets, adding artificial features and curves, and shifting time series etc.
+* A structured data generation process to support a diverse, and robust representation of fault-type classifications,
+    + In order to detect and distinguish classes of faulty signal, data should be generated that form a diverse set of classes representative of what faulty signals may look like
+    + A variety of techniques of generating faulty-classes are described by Jeong and Lu et al. include adding random noise existing datasets, adding artificial features and curves, and shifting time series etc.
 
-* Features of the original data that are estimated from the multi-resolution decomposition, for example: 
- + Coarse level wavelet coefficients can be used to identify faults that relate to global faults related to the shape of the original data series relative to new signals
-  + Granular wavelet coefficients, represented at lower levels of the decomposition can be used to identify faults that related local and global faults representing faults smaller in magnitude relative to the dominant signal patterns
+* Features of the original data that are estimated from the multi-resolution decomposition, for example, 
+    + Coarse level wavelet coefficients can be used to identify faults that relate to global faults related to the shape of the original data series relative to new signals
+    + Granular wavelet coefficients, represented at lower levels of the decomposition can be used to identify faults that related local and global faults representing faults smaller in magnitude relative to the dominant signal patterns
   
-To undertake these tasks described programmatically, Jeong and Lu et al. utilize a classification and regression tree (CART) to classify datasets into fault classes by relying on estimates of wavelet coefficients at different resolution levels in the signal decomposition of both faulty, and original signals. Undertaking a decision-making process 
+To undertake these tasks described programmatically, Jeong and Lu et al. utilize a classification and regression tree (CART) to classify datasets into fault classes by relying on estimates of wavelet coefficients at different resolution levels in the signal decomposition of both faulty, and original signals. This approach progammatically incorporates some of the visual indications of differences across fault classes that are highlighted in the multi-resolution plots provided in the previous section. By incorporating resolution level, and coefficient magnitude as features in a decision tree, with the fault class as the outcome of interest, a decision tree can yield insight and mechanisms to predict fault classes given values from a wavelet decomposition directly. 
 
 ## 2. Categorical Data Analysis (25%)
 
@@ -548,8 +547,10 @@ x <- as.numeric(aep$AEP_MW) #input megawatts time series
 n.levels <- 4
 aep.haar <- mra(x = x, "haar", n.levels, "dwt")
 nplots <- n.levels + 2
-par(mfcol=c(nplots,2), pty="m", mar=c(5-2.5,4,4-2,1.5), cex.main = 0.9)
-plot.ts(x, axes=F, main="Haar Filter: Multi-Resolution Plot", ylab = 'Original', bty='n')
+par(mfcol=c(nplots,2), pty="m", mar=c(5-2.5,4,4-2,1.5), 
+    cex.main = 0.9)
+plot.ts(x, axes=F, main="Haar Filter: Multi-Resolution Plot", 
+        ylab = 'Original', bty='n')
 axis(side=1, at=seq(0,1024,by=128), 
      labels=seq(0,1024,by=128))
 axis(side=2, at=c(round(min(x),digits = -4),round(max(x),digits = -4)), 
@@ -558,13 +559,16 @@ for(i in 1:(n.levels +1)){
   plot.ts(aep.haar[[i]], axes=F, ylab=names(aep.haar)[i],bty='n')
   axis(side=1, at=seq(0,1024,by=128), 
      labels=seq(0,1024,by=128))
-  axis(side=2, at=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)), 
-       labels=c(round(min(aep.haar[[i]]),digits = -2),round(max(aep.haar[[i]]),digits = -2)))
+  axis(side=2, at=c(round(min(aep.haar[[i]]),digits = -2),
+                    round(max(aep.haar[[i]]),digits = -2)), 
+       labels=c(round(min(aep.haar[[i]]),digits = -2),
+                round(max(aep.haar[[i]]),digits = -2)))
 }
 
 #family daubechies
 aep.la8 <- mra(x = x, "la8", n.levels, "dwt")
-plot.ts(x, axes=F, main="Daubechies Filter (L=8): Multi-Resolution Plot", ylab = 'Original', bty='n')
+plot.ts(x, axes=F, main="Daubechies Filter (L=8): Multi-Resolution Plot", 
+        ylab = 'Original', bty='n')
 axis(side=1, at=seq(0,1024,by=128), 
      labels=seq(0,1024,by=128))
 axis(side=2, at=c(round(min(x),digits = -4),round(max(x),digits = -4)), 
@@ -573,8 +577,10 @@ for(i in 1:(n.levels +1)){
   plot.ts(aep.la8[[i]], axes=F, ylab=names(aep.la8)[i],bty='n')
   axis(side=1, at=seq(0,1024,by=128), 
        labels=seq(0,1024,by=128))
-  axis(side=2, at=c(round(min(aep.la8[[i]]),digits = -2),round(max(aep.la8[[i]]),digits = -2)), 
-       labels=c(round(min(aep.la8[[i]]),digits = -2),round(max(aep.la8[[i]]),digits = -2)))
+  axis(side=2, at=c(round(min(aep.la8[[i]]),digits = -2),
+                    round(max(aep.la8[[i]]),digits = -2)), 
+       labels=c(round(min(aep.la8[[i]]),digits = -2),
+                round(max(aep.la8[[i]]),digits = -2)))
 }
 ```
   
@@ -592,8 +598,10 @@ spl_res <- rbindlist(mclapply(1:nrow(adat), function(i){
   spl_fit_x1 <- smooth.spline(train$disp,train$mpg, cv= F,df = 3)
   spl_fit_x2 <- smooth.spline(train$cyl,residuals(spl_fit_x1), cv= F,df = 3)
   spl_fit_x3 <- smooth.spline(train$accel,residuals(spl_fit_x2), cv= F,df = 3)
-  test <- transform(test, prediction = predict(spl_fit_x1, data.frame(test$disp))$y + 
-                      predict(spl_fit_x2, data.frame(test$cyl))$y + predict(spl_fit_x3, data.frame(test$accel))$y)
+  test <- transform(test, 
+                    prediction = predict(spl_fit_x1, data.frame(test$disp))$y + 
+                      predict(spl_fit_x2, data.frame(test$cyl))$y + 
+                      predict(spl_fit_x3, data.frame(test$accel))$y)
   test$error <- test$mpg - test$prediction #actual vs. estimate
   test
 }, mc.cores=10))
