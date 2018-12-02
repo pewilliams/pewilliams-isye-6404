@@ -58,7 +58,7 @@ knitr::kable(head(aep), caption = 'AEP Hourly Energy Consumption in Megawatts', 
 
 A multi-resolution plot, including the original time series of energy consumption data, provides a lot of context on the data. The plot of the original data shown below highlights significant shifts in energy consumption in the time series, and a persistent daily cyclical pattern. 
 
-To contrast the multi-resolution plots below, we have selected both the 'Haar' and 'Daubechies' filters for comparison in each column. For visual simplicity and interpretation both plots rely on 4 levels, or depth in terms of signal reconstruction. The MRA plot quickly highlights, for both families, that for the first scaling level $S2$, we have a good representation of the original function, that at further depth the signals are much noisier. Also worth noting is the contrast in smoothness of the 'Daubechies' first level decomposition vs. the 'Haar'. In fact the first level for the 'Daubechies' family captures more of the original signal, as the magnitude, or scale of signals at lower levels is tighter relative to the 'Haar' decomposition, as shown below: 
+To contrast the multi-resolution plots below, we have selected both the 'Haar' and 'Daubechies' filters for comparison in the columns of the figure below. For visual simplicity and interpretation both plots rely on 4 levels, or depth of signal decomposition. The MRA plot quickly highlights, for both families, that for the first scaling level $S2$, we have a good representation of the original function, and that at further depth the signals are much noisier. Also worth noting is the contrast in smoothness of the 'Daubechies' first level decomposition vs. the 'Haar'. In fact the first level for the 'Daubechies' family captures more of the original signal, as the magnitude, or scale of coefficients at lower levels is tighter relative to the 'Haar' decomposition, as shown below: 
 
 ```{r mra_plots_haar, include = T, echo = F, fig.align='center', fig.height=8}
 x <- as.numeric(aep$AEP_MW) #input megawatts time series
@@ -108,7 +108,7 @@ for(i in 1:(n.levels +1)){
 
 To reduce the number of non-zero DWT coefficients, we rely on two popular shrinkage methodologies to find smooth representations of our original series. We utilize the *SURE* and *VisuShrink* thresholding methodologies, described by Donoho and Johnstone in their 1995 pager *Adapting to Unknown Smoothness via Wavelet Shrinkage*. We apply thresholding on our DWT that utilized 4 levels, and the Daubechies Filter described above. A very brief of these thresholding methodologies is provided here: 
 
-The *VisuShrink* approach to thresholding relies on an estimate of the noise level of wavelet coefficients denoted $\hat{\sigma}$. $\hat{\sigma}$ is often implemented as a scaled median absolute deviation the realized wavelet coefficients. The thresholding itself is shown as, *$T_{UV} = \sqrt{2(log\ n)\hat{\sigma}}$ where $n$ is the number of data points, and $\hat{\sigma}$ is as described above.   
+The *VisuShrink* approach to thresholding relies on an estimate of the noise level of wavelet coefficients denoted $\hat{\sigma}$. $\hat{\sigma}$ is often implemented as a scaled median absolute deviation of the estimated wavelet coefficients. The thresholding rule applied relies on the estimate, *$T_{visu} = \sqrt{2(log\ n)\hat{\sigma}}$, where $n$ is the number of data points, and $\hat{\sigma}$ is as described above.   
 
 The *SURE* methodology utilizes Stein's unbiased risk estimation, as described by by Donoho and Johnstone in their paper. This methodology creates a threshold rule $t_j$ for each resolution level $j$ in a wavelet transform, and is found using cross-validation.  
 
@@ -382,7 +382,7 @@ adat <- readRDS('/Users/peterwilliams/Projects/pewilliams-isye-6404/exams/exam3/
 knitr::kable(head(adat[,c('mpg','disp','cyl','accel','name'),with=F]), col.names = c('MPG','Displacement','Cylinder Count','Acceleration','Model'), caption = 'Preview of Automobile MPG Dataset (Published 1993)')
 ```
 
-One aspect of this dataset that makes it interestingly suite to kernel and spline regression, is that visually, there is evidence of non-linear relationship between the outcome of interest (*MPG*) and *Engine Displacement*. The relationship between *MPG*, *Cylinder* count and *Acceleration* is less clear, and shown below in a series of scatter plots:  
+One aspect of this dataset that makes it suited to kernel and spline regression, is that visually, there is evidence of non-linear relationship between the outcome of interest (*MPG*) and *Engine Displacement*. The relationship between *MPG*, *Cylinder* count and *Acceleration* is less clear, and shown below in a series of scatter plots:  
 
 ```{r auto_plot, include = T, echo= F, fig.align='center',fig.height=3}
 par(mfrow=c(1,3))
@@ -456,7 +456,7 @@ Note that computational details for the leave-one-out procedure are detailed in 
 
 *2)	Select 2 sets of x-locations, e.g., (1st set: x1 = 3, x2 = 5, x3 = 2, where 3, 5, 2 are values within x-data range). These 2 sets of x-locations should be from a location close to the center of x-data-range and another location closer to the edge. Make predictions of Y at these x-data. Compare the predictions from kernel and spline methods, and also comment on the impact from x-data-locations.*  
 
-To select $X$-locations, we took the median across all $X$ variables, i.e. *Displacement*, *Cylinder Count*, and *Acceleration* as one $X$-location, denoted as the "Center Point" in subsequence analysis. We then also created an "Outside Point" which is based on the maximum across all $X$ variables, less $1$. That is a point very close to the maximum across all co-variates. The table below summarizes the exact location of these points, and also provides associated predicted values from both kernel regression and spline models that were fit to the full auto-mpg dataset:   
+To select $X$-locations, we took the median across all $X$ variables, i.e. *Displacement*, *Cylinder Count*, and *Acceleration* as one $X$-location, referred to as the "Center Point" here. We then also created an "Outside Point" which is based on the maximum across all $X$ variables, less $1$. That is, a point very close to the maximum across all co-variates. The table below summarizes the exact location of these points, and also provides associated predicted values from both kernel regression and spline models that were fit to the full auto-mpg dataset:   
 
 ```{r location_pred, include =F, echo = F}
 #fit entire dataset
@@ -507,7 +507,7 @@ with(adat,{
   })
 ```
 
-The scatter plot again shows that the spline provides a slightly more conservative predictin vs. the kernal regression. However, both predictions do lie in a reasonable place relative to actual data points observed. 
+The scatter plot again shows that the spline provides a slightly more conservative prediction vs. kernel regression. However, both predictions lie in a reasonable location relative to actual data points observed. 
 
 *3)	Construct the 90% Bias-Corrected Bootstrap CIs for the predictions at the selected 2-sets of x-locations. Show details of the bias-correction process. Compare the CIs at two x-locations, and also from two nonparametric regression methods.*  
 
@@ -517,7 +517,7 @@ Continuing our analysis of prediction at our two $X$-locations, we conduct a boo
 2. Fitting a spline or kernel regression model to the boostrap sample data, and 
 3. Predicting *MPG* at the given $X$-locations using the models fit in step 2
 
-To create a more robust bootstrap estimate, we used bias-correction, or *BCa*, a technique similar to a percentile approach to boostrap sampling. However the bootstrap percentiles,but adjusted to account for bias and skewness. Underlying the the *BCa* approach is a notion of acceleration and skewness informing the parameter intervals, and also a connection to the normal distribution, as *BCa* relies on the CDF of a standard normal random variable to compute percentile estimates. The results of the bootstrap analysis are summarized in the table below:  
+To create a more robust bootstrap estimate, we use bias-correction, or *BCa*, a technique similar to a percentile approach to boostrap sampling. However the bootstrap percentiles are adjusted to account for bias and skewness. Underlying the the *BCa* approach is a notion of acceleration and skewness informing the parameter intervals, and also a connection to the normal distribution, as *BCa* relies on the CDF of a standard normal random variable to compute percentile estimates. The results of the bootstrap analysis are summarized in the table below:  
 
 ```{r bca_boot, include =T, echo = F}
 #read in results from a separate script --
@@ -527,7 +527,7 @@ knitr::kable(boot_res, caption = 'Bias-Corrected Bootstrap CIs - 90%, By Model T
              colnames = c('X-Location','Prediction','Lower CI','Upper CI','Model'),digits = 2)
 ```
 
-*Note: Instability of the kernel regression fits from the np package, and instability of fits from smooth.spline in R (base) were both problematic due to sample size, and computation speed constraints further analysis would have likely yielded more stable results.*
+*Note: Instability of the kernel regression fits from the np package, and instability of fits from smooth.spline in R (base) were both problematic due to sample size, and computation speed constraints. Further analysis would have likely yielded more stable results.*
 
 A key point to highlight from this table, is the instability of the kernel regression fits given our dataset. Bootstrap replication actually created non-informative confidence intervals for our kernel regression model, given poor fits of in some boostrap replications. In contrast results from the spine model were more informative, and much narrower, and perhaps precise in comparison to kernel regression. The stability of the spline model in comparison does highlight its utility in this very specific case. 
 
